@@ -1,13 +1,15 @@
 import tkinter as tk
-import threading
-from pynput import mouse
+from pynput import keyboard, mouse
 
 # ── 全局常量 ────────────────────────────────────────────────
 COLOR        = "#00FF00"   # 准星颜色
-DOT_RADIUS   = 0.5           # 中心点半径（像素）
-INNER_RADIUS = 10           # 线段内圈半径（点边缘到线段起点的距离）
+DOT_RADIUS   = 0.5         # 中心点半径（像素）
+INNER_RADIUS = 10          # 线段内圈半径（点边缘到线段起点的距离）
 OUTER_RADIUS = 20          # 线段外圈半径（点边缘到线段终点的距离）
-LINE_WIDTH   = 1           # 线段粗细（像素）   
+LINE_WIDTH   = 1           # 线段粗细（像素）
+
+KEY_MAP      = keyboard.KeyCode.from_char("m")   # 地图模式切换键
+KEY_ESC      = keyboard.Key.esc                  # 地图模式退出键
 # ────────────────────────────────────────────────────────────
 
 
@@ -26,6 +28,8 @@ class CrosshairOverlay:
         self.root.attributes("-alpha", 1.0)
         self.root.config(bg="black")
         self.root.wm_attributes("-disabled", True)         # 鼠标点击穿透
+        # 注：-disabled 同时也是 Tk 收不到键盘事件的原因，
+        #     故键位一律由全局监听器处理，不走 Tk 事件循环。
 
         self.canvas = tk.Canvas(
             self.root,
@@ -38,10 +42,22 @@ class CrosshairOverlay:
 
         self.cx = screen_w // 2
         self.cy = screen_h // 2
-        self.visible = True
+
+        self.map_mode = False      # 地图模式：按 M 进入，按 M/Esc 退出
+        self.mouse_held = False    # 右键按住：临时隐藏（开镜用）
 
         self._draw()
         self._start_mouse_listener()
+        self._start_key_listener()
+
+    # ── 可见性 ──────────────────────────────────────────────
+    @property
+    def visible(self):
+        return not (self.map_mode or self.mouse_held)
+
+    def _redraw(self):
+        """跨线程安全地重绘：把绘制调度回 Tk 主线程。"""
+        self.root.after(0, self._draw)
 
     # ── 绘制准星 ────────────────────────────────────────────
     def _draw(self):
@@ -76,10 +92,24 @@ class CrosshairOverlay:
     def _start_mouse_listener(self):
         def on_click(x, y, button, pressed):
             if button == mouse.Button.right:
-                self.visible = not pressed
-                self.root.after(0, self._draw)
+                self.mouse_held = pressed
+                self._redraw()
 
         listener = mouse.Listener(on_click=on_click)
+        listener.daemon = True
+        listener.start()
+
+    # ── 键盘监听（M 切换地图模式，Esc 退出地图模式） ───────
+    def _start_key_listener(self):
+        def on_press(key):
+            if key == KEY_MAP:
+                self.map_mode = not self.map_mode
+                self._redraw()
+            elif key == KEY_ESC and self.map_mode:
+                self.map_mode = False
+                self._redraw()
+
+        listener = keyboard.Listener(on_press=on_press)
         listener.daemon = True
         listener.start()
 
