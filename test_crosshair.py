@@ -1,6 +1,6 @@
 import os
 import unittest
-from pathlib import Path
+
 
 # 状态机测试不需要真实键盘或窗口；dummy 后端无 Windows 键码定义。
 os.environ.setdefault("PYNPUT_BACKEND", "dummy")
@@ -62,10 +62,22 @@ class StateTests(unittest.TestCase):
         self.state.right_held = False
         self.assertTrue(self.state.show_crosshair)
 
-    def test_single_map_scroll_and_asset(self):
-        self.assertTrue((Path(mod.__file__).parent / mod.MAPS[0][1]).is_file())
+    def test_single_map_scroll_and_coordinates(self):
+        self.assertEqual(len(mod.MAPS[0].points), 15)
+        from map_layers import screen_points
+        points = screen_points(1920, 1080, mod.MAPS[0])
+        self.assertEqual(len(points), 15)
+        self.assertTrue(all(0 <= x <= 1920 and 0 <= y <= 1080 for x, y in points))
+        from map_layers import map_rect
+        for layer in mod.MAPS:
+            x, y, w, h = map_rect(1920, 1080, layer)
+            self.assertTrue(0 <= x and 0 <= y and x + w <= 1920 and y + h <= 1080)
+            self.assertEqual(len(screen_points(1920, 1080, layer)), len(layer.points))
+        self.assertEqual(len(mod.MAPS[1].points), 10)
         state = mod.OverlayState(len(mod.MAPS))
         state.map_mode = state.f2_held = True
+        state.scroll(-1)
+        self.assertEqual(state.map_index, 1)
         state.scroll(-1)
         self.assertEqual(state.map_index, 0)
 

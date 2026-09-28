@@ -1,9 +1,7 @@
 import queue
 import tkinter as tk
-from pathlib import Path
-
-from PIL import Image, ImageTk
 from pynput import keyboard, mouse
+from map_layers import MAPS, screen_points
 
 COLOR = "#00FF00"
 DOT_RADIUS = 0.5
@@ -11,8 +9,12 @@ INNER_RADIUS = 10
 OUTER_RADIUS = 20
 LINE_WIDTH = 1
 
-# 顺序就是滚轮切换顺序；后续图片直接放进 maps/ 并在这里登记。
-MAPS = [("艾伦格 · 密室", "maps/erangel-secret-rooms.png")]
+# 屏幕坐标校准：默认沿用此前参考图的居中等比缩放。
+# 游戏内地图若位置或大小不同，调整下面三项；不读游戏内存。
+MAP_SCALE = 0.85
+MAP_OFFSET_X = 0
+MAP_OFFSET_Y = 0
+POINT_RADIUS = 9
 MAP_KEY = "m"
 MAP_VK = 0x4D  # Windows 虚拟键码：M；输入法使 char=None 时仍能识别
 POINTS_KEY = keyboard.Key.f2
@@ -80,13 +82,7 @@ class CrosshairOverlay:
         self.cx, self.cy = screen_w // 2, screen_h // 2
         self.state = OverlayState(len(MAPS))
         self.events = queue.Queue()
-        self.images = []  # 持有 PhotoImage 引用，否则 Tk 会释放图片
-        for name, filename in MAPS:
-            path = Path(__file__).resolve().parent / filename
-            with Image.open(path) as source:
-                image = source.convert("RGB")
-                image.thumbnail((int(screen_w * .85), int(screen_h * .85)), Image.Resampling.LANCZOS)
-                self.images.append(ImageTk.PhotoImage(image, master=self.root))
+        self.screen_w, self.screen_h = screen_w, screen_h
         self._draw()
         self.keyboard_listener = keyboard.Listener(
             on_press=lambda key: self.events.put(("press", key)),
@@ -122,11 +118,15 @@ class CrosshairOverlay:
     def _draw(self):
         self.canvas.delete("overlay")
         if self.state.show_points:
-            name, _ = MAPS[self.state.map_index]
-            self.canvas.create_image(self.cx, self.cy,
-                                     image=self.images[self.state.map_index], tags="overlay")
-            self.canvas.create_text(self.cx, 35, text=f"{name}  |  F2 松开隐藏 · 滚轮切图",
-                                    fill="#00FF00", font=("Arial", 16, "bold"), tags="overlay")
+            layer = MAPS[self.state.map_index]
+            for x, y in screen_points(self.screen_w, self.screen_h, layer,
+                                      MAP_SCALE, MAP_OFFSET_X, MAP_OFFSET_Y):
+                r = POINT_RADIUS
+                # 黑色画布为窗口色键；只绘制标记，底图透出。
+                self.canvas.create_oval(x-r, y-r, x+r, y+r,
+                                        outline="#00FFFF", width=3, tags="overlay")
+                self.canvas.create_oval(x-2, y-2, x+2, y+2,
+                                        fill="#FF4040", outline="", tags="overlay")
         if self.state.show_crosshair:
             cx, cy = self.cx, self.cy
             r, i, o, lw = DOT_RADIUS, INNER_RADIUS, OUTER_RADIUS, LINE_WIDTH
