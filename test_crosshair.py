@@ -73,12 +73,12 @@ class StateTests(unittest.TestCase):
             x, y, w, h = map_rect(1920, 1080, layer)
             self.assertTrue(0 <= x and 0 <= y and x + w <= 1920 and y + h <= 1080)
             self.assertEqual(len(screen_points(1920, 1080, layer)), len(layer.points))
-        self.assertEqual(len(mod.MAPS[1].points), 10)
+        self.assertEqual([len(layer.points) for layer in mod.MAPS], [15, 15, 15, 15, 10])
         state = mod.OverlayState(len(mod.MAPS))
         state.map_mode = state.f2_held = True
         state.scroll(-1)
         self.assertEqual(state.map_index, 1)
-        state.scroll(-1)
+        state.scroll(1)
         self.assertEqual(state.map_index, 0)
 
 
